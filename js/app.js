@@ -150,6 +150,7 @@
     $('#nav').innerHTML = TABS.map(t => `<button role="tab" aria-selected="${t[0] === P.tab}" data-act="tab" data-t="${t[0]}"><b>${t[2]}</b>${t[1]}</button>`).join('');
     const V = { inicio: vInicio, reg: vReg, conteo: vConteo, tiempos: vTiempos, etiquetas: vEtiquetas, datos: vDatos }[P.tab];
     $('#main').innerHTML = V();
+    if (P.msg) scrollTo(0, 0);
     const t = $('#reg-t,#conteo-t,#tiempos-t'); // el selector de la vista activa
     if (t) { const vista = t.id.replace('-t', ''); const s = $('#' + vista + '-s');
       t.addEventListener('input', () => { const x = C.leerCodigo(t.value, CAT); if (x) elegir(vista, x.cod); });
@@ -158,7 +159,7 @@
     const u = $('#u-n'); if (u) u.addEventListener('change', async () => { P.user = u.value.trim(); await self.Store.fijarMeta('user', P.user); });
     if (P.edit) { const ed = $('#editar'); ed && ed.scrollIntoView({ block: 'center' }); }
   }
-  const msgErr = (a) => { const b = $('#f-err'); if (b) b.innerHTML = `<div class="msg bad" role="alert">${a.map(esc).join('<br>')}</div>`; };
+  const msgErr = (a) => { const b = $('#f-err'); if (b) { b.innerHTML = `<div class="msg bad" role="alert">${a.map(esc).join('<br>')}</div>`; if (b.scrollIntoView) b.scrollIntoView({ block: 'center' }); } };
   const val = (id) => { const e = $('#' + id); return e ? e.value.trim() : ''; };
 
   async function exportar(nombre, texto, mime) {
