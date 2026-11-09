@@ -72,3 +72,6 @@ Para cambiar los insumos, edite `js/catalogo.js` (código, descripción y minuto
 
 ## Versión 3: pedidos (KPI2)
 En la pestaña Tiempos hay dos opciones: «Búsqueda de insumo (KPI3)» y «Pedidos (KPI2)». Cada pedido se registra como *Solicitud diaria* (debe salir el mismo día) o *Pedido semanal programado* (con fecha comprometida), con servicio, hora de llegada y hora de despacho. La app calcula los minutos promedio por solicitud diaria (meta ≤ 90) y los días por pedido semanal (meta ≤ 2), y cuántos semanales salieron a tiempo. Se exporta en Datos → Pedidos (.csv). Archivos cambiados: sw.js y README.md (raíz), js/core.js y js/app.js (carpeta js).
+
+## Versión 5: planilla compartida
+La pestaña Datos tiene la tarjeta «Planilla compartida». Conecta cada celular a una planilla de Google (Apps Script, carpeta `servidor/`) para que todos vean el mismo saldo. Pasos en `servidor/INSTRUCCIONES.md`. Archivos nuevos o cambiados: `index.html`, `sw.js`, `css/app.css`, `js/app.js`, `js/sync.js` y `servidor/`.
