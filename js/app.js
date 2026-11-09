@@ -96,7 +96,28 @@
     <div class="tiles"><div class="tile"><small>Contados</small><strong>${r.contados} de ${CAT.length}</strong></div><div class="tile"><small>Coinciden (±2 %)</small><strong>${r.coinciden}</strong></div><div class="tile"><small>KPI1</small><strong>${r.kpi1 == null ? '—' : Math.round(r.kpi1 * 100) + ' %'}</strong><span>Meta ≥ 95 %</span></div></div>
     <h2>Conteos recientes</h2>${cont.length ? `<div class="tw"><table><thead><tr><th>Fecha</th><th>Código</th><th class="n">Saldo planilla</th><th class="n">Conteo</th><th class="n">Dif.</th><th>Resultado</th></tr></thead><tbody>${cont.map(e => { const x = C.resultadoConteo(ST, e); return `<tr><td>${esc(e.fecha)}</td><td class="code">${esc(e.cod)}</td><td class="n">${fmt(x.sp)}</td><td class="n">${fmt(e.cant)}</td><td class="n">${x.dif > 0 ? '+' : ''}${fmt(x.dif)}</td><td>${x.ok ? '<span class="pill ok">Coincide</span>' : '<span class="pill bad">No coincide</span>'}</td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Aún no hay conteos.</p>'}`;
   }
+  function ahoraLocal() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
+  function vPedidos() {
+    const r = C.resumen(ST), m = P.modal || 'Diario', ped = ST.vivos.filter(e => e.tipo === 'Pedido').slice(-10).reverse();
+    const a = r.kpi2Min, b = r.kpi2Dias;
+    const dur = (e) => { const x = new Date(e.fin) - new Date(e.ini); return e.modal === 'Diario' ? Math.round(x / 6e4) + ' min' : fmt(Math.round(x / 864e5 * 10) / 10) + ' días'; };
+    return msgHtml() + `<div class="card"><p class="muted">Registre cada pedido que sale de la bodega. <b>Solicitud diaria:</b> la piden los servicios y debe salir el mismo día. <b>Pedido semanal programado:</b> tiene una fecha comprometida de entrega.</p>
+    <label>Tipo de pedido</label><div class="seg" role="group"><button type="button" aria-pressed="${m === 'Diario'}" data-act="modal" data-t="Diario">Solicitud diaria</button><button type="button" aria-pressed="${m === 'Semanal'}" data-act="modal" data-t="Semanal">Pedido semanal programado</button></div>
+    <label for="p-serv">Servicio o área que pide</label><input type="text" id="p-serv" placeholder="Ej.: UCI, Pabellón, Urgencia">
+    <div class="row"><div><label for="p-ini">Llegó la solicitud</label><input type="datetime-local" id="p-ini" value="${ahoraLocal()}"></div><div><label for="p-fin">Salió el despacho</label><input type="datetime-local" id="p-fin" value="${ahoraLocal()}"></div></div>
+    ${m === 'Semanal' ? '<label for="p-comp">Fecha comprometida de entrega</label><input type="date" id="p-comp">' : ''}
+    <div class="row"><div><label for="p-n">Nº de ítems (opcional)</label><input type="number" id="p-n" inputmode="numeric" min="0"></div><div><label for="f-resp">Responsable</label><input type="text" id="f-resp" value="${esc(P.user)}"></div></div>
+    <label for="f-obs">Observación</label><input type="text" id="f-obs"><div id="f-err"></div>
+    <div class="btns"><button class="btn" data-act="guardar-pedido">Guardar pedido</button></div></div>
+    <div class="tiles"><div class="tile"><small>Solicitud diaria (promedio)</small><strong>${a == null ? '—' : Math.round(a) + ' min'}</strong><span>Meta ≤ ${C.META.kpi2min} · antes 123 · ${r.nDiarias} solicitudes en ${r.diasMedidos} días</span></div><div class="tile"><small>Pedidos semanales</small><strong>${b == null ? '—' : fmt(Math.round(b * 10) / 10) + ' días'}</strong><span>Meta ≤ ${C.META.kpi2dias} · antes 2,6 · ${r.nSemanales} pedidos</span></div><div class="tile"><small>Semanales a tiempo</small><strong>${r.nSemanales ? r.semATiempo + ' de ' + r.nSemanales : '—'}</strong><span>según fecha comprometida</span></div></div>
+    <h2>Últimos pedidos</h2>${ped.length ? `<div class="tw"><table><thead><tr><th>Tipo</th><th>Servicio</th><th>Llegó</th><th class="n">Duración</th><th>¿A tiempo?</th></tr></thead><tbody>${ped.map(e => `<tr><td>${e.modal === 'Diario' ? 'Diaria' : 'Semanal'}</td><td>${esc(e.serv)}</td><td>${esc(e.ini.replace('T', ' '))}</td><td class="n">${dur(e)}</td><td>${e.modal === 'Semanal' ? (e.fin.slice(0, 10) <= e.comp ? '<span class="pill ok">Sí</span>' : '<span class="pill bad">No</span>') : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Aún no hay pedidos registrados.</p>'}`;
+  }
   function vTiempos() {
+    const sub = P.sub || 'busq';
+    const sw = `<div class="seg" role="group" style="margin-bottom:12px"><button type="button" aria-pressed="${sub === 'busq'}" data-act="sub" data-t="busq">Búsqueda de insumo (KPI3)</button><button type="button" aria-pressed="${sub === 'ped'}" data-act="sub" data-t="ped">Pedidos (KPI2)</button></div>`;
+    return sw + (sub === 'ped' ? vPedidos() : vBusqueda());
+  }
+  function vBusqueda() {
     const r = C.resumen(ST), cod = P.sel.tiempos, k = r.kpi3;
     return msgHtml() + `<div class="card"><p class="muted">Mida cuántos minutos tardó en encontrar el insumo desde que recibió la solicitud (KPI3). Meta: 2,0 minutos o menos.</p>${selector('tiempos', cod)}
     <div class="row"><div><label for="f-cant">Minutos</label><input type="number" id="f-cant" inputmode="decimal" min="0" step="any"></div><div><label for="f-resp">Responsable</label><input type="text" id="f-resp" value="${esc(P.user)}"></div></div><div id="f-err"></div>
@@ -112,10 +133,15 @@
   function vDatos() {
     return msgHtml() + `<div class="card"><h2 style="margin-top:0">Mis datos</h2><label for="u-n">Mi nombre</label><input type="text" id="u-n" value="${esc(P.user)}" placeholder="Su nombre"><p class="muted">Los registros quedan guardados en este celular, aunque se cierre la app o no haya internet. Cada movimiento lleva su nombre, la fecha y la hora, y no se puede borrar: un error se corrige con Anular.</p></div>
     <div class="card"><h2 style="margin-top:0">Enviar mis registros</h2><p class="muted">Al terminar el turno, exporte y entregue el archivo .json a quien consolida. Los .csv se abren en Excel.</p>
-    <div class="btns"><button class="btn" data-act="exp-json">Exportar registros (.json)</button><button class="btn sec" data-act="exp-mov">Movimientos (.csv)</button><button class="btn sec" data-act="exp-sal">Saldo (.csv)</button><button class="btn sec" data-act="exp-lot">Lotes (.csv)</button></div></div>
+    <div class="btns"><button class="btn" data-act="exp-json">Exportar registros (.json)</button><button class="btn sec" data-act="exp-mov">Movimientos (.csv)</button><button class="btn sec" data-act="exp-sal">Saldo (.csv)</button><button class="btn sec" data-act="exp-lot">Lotes (.csv)</button><button class="btn sec" data-act="exp-ped">Pedidos (.csv)</button></div></div>
     <div class="card"><h2 style="margin-top:0">Actualizar con los registros de otros</h2><p class="muted">Quien consolida elige los .json de sus compañeros. Los movimientos repetidos se ignoran y los saldos se recalculan solos.</p>
     <label for="i-f">Archivos .json</label><input type="file" id="i-f" accept=".json,application/json" multiple><div class="btns"><button class="btn" data-act="importar">Importar y actualizar</button></div></div>
+    <div class="card"><h2 style="margin-top:0">Cargar parámetros de los 20 insumos</h2><p class="muted">Descargue la plantilla, complétela en Excel (ubicación, saldo inicial, mínimo, máximo, consumo diario y plazo) y súbala aquí. Es más rápido que editar insumo por insumo. La plantilla trae una ubicación sugerida que debe validar la jefatura.</p>
+    <div class="btns"><button class="btn sec" data-act="exp-par">Descargar plantilla (.csv)</button></div>
+    <label for="p-f">Plantilla completada (.csv)</label><input type="file" id="p-f" accept=".csv,text/csv"><div class="btns"><button class="btn" data-act="imp-par">Cargar parámetros</button></div><div id="p-res"></div></div>
     ${P.instalar ? `<div class="card"><h2 style="margin-top:0">Instalar en el celular</h2><div class="btns"><button class="btn" data-act="instalar">Instalar la app</button></div></div>` : ''}
+    <div class="card"><h2 style="margin-top:0">Dejar este celular en blanco</h2><p class="muted">Borra los registros y parámetros de este celular. Úselo solo para quitar datos de prueba o si ya exportó y entregó sus registros. Hoy hay <b>${ST.vivos.length}</b> movimientos${P.ultExport ? '' : ' y nunca se exportó'}.</p>
+    <label for="z-t">Para confirmar, escriba BORRAR</label><input type="text" id="z-t" autocomplete="off" autocapitalize="characters"><div class="btns"><button class="btn bad" data-act="reiniciar">Borrar los datos de este celular</button></div><div id="z-res"></div></div>
     <div class="card"><h2 style="margin-top:0">Estado</h2><p class="muted">Almacenamiento: ${self.Store.modo() === 'idb' ? 'IndexedDB' : 'localStorage (respaldo)'} · Dispositivo: <span class="code">${esc(P.dev)}</span> · Cámara: ${P.scanOk ? 'disponible' : 'no disponible en este navegador (digite el código)'} · Registros: ${ST.evs.length}</p></div>`;
   }
 
@@ -144,6 +170,15 @@
 
   const acciones = {
     tab(el) { P.tab = el.dataset.t; P.msg = null; P.edit = null; P.anular = null; render(); scrollTo(0, 0); },
+    sub(el) { P.sub = el.dataset.t; P.msg = null; render(); },
+    modal(el) { P.modal = el.dataset.t; P.msg = null; render(); },
+    async 'guardar-pedido'() {
+      const m = { tipo: 'Pedido', modal: P.modal || 'Diario', serv: val('p-serv'), ini: val('p-ini'), fin: val('p-fin'), resp: val('f-resp'), obs: val('f-obs') };
+      const c = $('#p-comp'); if (c) m.comp = c.value; const n = C.num(val('p-n')); if (n != null && !isNaN(n)) m.n = n;
+      const err = C.validar(ST, m); if (err.length) return msgErr(err);
+      P.user = m.resp; await self.Store.fijarMeta('user', P.user);
+      await registrar(m); aviso('Pedido guardado.'); render();
+    },
     tipo(el) { P.tipo = el.dataset.t; P.msg = null; render(); },
     edit(el) { P.edit = el.dataset.cod; render(); },
     'edit-no'() { P.edit = null; render(); },
@@ -185,10 +220,25 @@
       P.user = m.resp; await self.Store.fijarMeta('user', P.user);
       await registrar(m); aviso(`Tiempo guardado: ${fmt(m.cant)} min para ${cod}.`); P.sel.tiempos = ''; render();
     },
+    'exp-par'() { exportar('plantilla_parametros_' + C.hoyISO() + '.csv', C.csvParametros(ST, true), 'text/csv'); },
+    async 'imp-par'() {
+      const box = $('#p-res'), f = $('#p-f').files[0], bad = (t) => { box.innerHTML = `<div class="msg bad" role="alert">${esc(t)}</div>`; };
+      if (!f) return bad('Elija la plantilla completada (.csv).');
+      if (!P.user) return bad('Primero escriba su nombre en Mis datos.');
+      const r = C.leerParametros(await f.text(), ST);
+      if (r.errores.length) return bad('No se cargó nada. Corrija esto y vuelva a subir: ' + r.errores.join(' '));
+      for (const c of r.cambios) await registrar({ tipo: 'Config', cod: c.cod, campos: c.campos });
+      aviso(r.cambios.length ? `Parámetros cargados en ${r.cambios.length} insumo(s)${r.sinCambio ? ` (${r.sinCambio} sin cambios)` : ''}.` : 'No había cambios que cargar.', r.cambios.length ? 'ok' : 'warn'); P.tab = 'inicio'; render();
+    },
+    async reiniciar() {
+      if (val('z-t') !== 'BORRAR') { $('#z-res').innerHTML = '<div class="msg bad" role="alert">Escriba BORRAR para confirmar.</div>'; return; }
+      await self.Store.borrarTodo(); await self.Store.fijarMeta('ultExport', 0); P.eventos = []; P.ultExport = 0; recalcular(); aviso('Este celular quedó en blanco.', 'ok'); P.tab = 'inicio'; render();
+    },
     imprimir() { self.print(); },
     'exp-json'() { exportar(`registros_${(P.user || P.dev).replace(/\W+/g, '_')}_${C.hoyISO()}.json`, C.paquete(P.eventos, P.dev, P.user), 'application/json'); },
     'exp-mov'() { exportar(`movimientos_${C.hoyISO()}.csv`, C.csvMovimientos(ST), 'text/csv'); },
     'exp-sal'() { exportar(`saldo_${C.hoyISO()}.csv`, C.csvSaldo(ST), 'text/csv'); },
+    'exp-ped'() { exportar(`pedidos_${C.hoyISO()}.csv`, C.csvPedidos(ST), 'text/csv'); },
     'exp-lot'() { exportar(`lotes_${C.hoyISO()}.csv`, C.csvLotes(ST), 'text/csv'); },
     async importar() {
       const fs = $('#i-f').files; if (!fs.length) { aviso('Elija uno o más archivos .json.', 'bad'); render(); return; }

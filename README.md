@@ -13,6 +13,8 @@ Funciona sin internet, no necesita cuenta ni servidor y guarda los datos en cada
 - **Etiquetas** imprimibles con código de barras Code 128 (código del insumo y ubicación).
 - **Escáner con la cámara** (BarcodeDetector) en Chrome, Edge y Samsung Internet para Android. Si el navegador no lo permite, se digita el código.
 - **Registro que no se borra.** Cada movimiento guarda quién, cuándo y desde qué dispositivo. Un error se corrige con *Anular* (con motivo); el movimiento queda en el historial.
+- **Cargar los parámetros en bloque**: se descarga una plantilla .csv con los 20 insumos (con una ubicación sugerida), se completa en Excel y se sube. Revisa cada fila y no carga nada si hay errores.
+- **Dejar el celular en blanco**: botón protegido (hay que escribir BORRAR) para quitar los datos de prueba.
 - **Exportar** registros (.json) y reportes para Excel (.csv: movimientos, saldo y lotes). **Importar** los .json de otros usuarios; los repetidos se ignoran.
 
 ## Cómo ponerla en línea (GitHub Pages, gratis)
@@ -32,7 +34,7 @@ Antes de subirla al hospital, consulte con la jefatura y con TI si pueden alojar
 ## Uso diario
 
 1. Cada persona abre *Datos*, escribe su nombre y queda listo.
-2. En *Inicio*, toque cada insumo y cargue su ubicación (MACROZONA-SECCIÓN-ESTANTERÍA-NIVEL-POSICIÓN), el saldo inicial y los parámetros (mínimo, máximo, consumo diario). Esto lo hace una persona; luego se comparte con los demás importando su .json.
+2. Una persona carga los parámetros: en *Datos* descarga la plantilla, la completa en Excel (ubicación MACROZONA-SECCIÓN-ESTANTERÍA-NIVEL-POSICIÓN, saldo inicial, mínimo, máximo, consumo diario) y la sube con *Cargar parámetros*. Luego exporta su .json y los demás lo importan, así todos parten con los mismos datos. También se puede editar insumo por insumo desde *Inicio*.
 3. Registre cada movimiento en *Registrar*, los conteos en *Conteo* y los tiempos en *Tiempos*.
 4. **Al terminar el turno**, en *Datos*, *Exportar registros (.json)* y entregue el archivo a quien consolida.
 5. Quien consolida usa *Importar y actualizar* con los archivos de todos y verá el saldo, el KPI1 y el KPI3 del equipo. Luego exporta los .csv para Excel.
@@ -66,3 +68,7 @@ node tests/ui-smoke.js
 ```
 
 Para cambiar los insumos, edite `js/catalogo.js` (código, descripción y minutos de búsqueda de antes) y suba la versión de `sw.js`.
+
+
+## Versión 3: pedidos (KPI2)
+En la pestaña Tiempos hay dos opciones: «Búsqueda de insumo (KPI3)» y «Pedidos (KPI2)». Cada pedido se registra como *Solicitud diaria* (debe salir el mismo día) o *Pedido semanal programado* (con fecha comprometida), con servicio, hora de llegada y hora de despacho. La app calcula los minutos promedio por solicitud diaria (meta ≤ 90) y los días por pedido semanal (meta ≤ 2), y cuántos semanales salieron a tiempo. Se exporta en Datos → Pedidos (.csv). Archivos cambiados: sw.js y README.md (raíz), js/core.js y js/app.js (carpeta js).
