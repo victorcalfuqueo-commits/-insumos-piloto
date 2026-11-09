@@ -42,3 +42,5 @@ tr.click{cursor:pointer}tr.click:hover{background:var(--bg)}
 .label{margin:0;background:#fff;color:#000;border:1px dashed #888;border-radius:6px;padding:8px;text-align:center;break-inside:avoid}.label svg{max-width:100%;height:auto}.label figcaption{font-size:11px;line-height:1.3}.label .muted{color:#555}
 @media print{body{background:#fff;padding:0}.noprint,nav,header{display:none!important}main{padding:0;max-width:none}.labels{grid-template-columns:repeat(3,1fr);gap:4mm}.label{border:1px solid #000}}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+header #syncst{margin:6px 0 0;font-size:12px;font-weight:600;padding:3px 8px;border-radius:10px;display:inline-block;background:rgba(255,255,255,.18)}header .sy-ok{background:rgba(120,220,150,.35)}header .sy-warn{background:rgba(255,200,90,.45)}header .sy-bad{background:rgba(255,120,120,.5)}

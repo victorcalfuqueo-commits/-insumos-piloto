@@ -6,16 +6,52 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (n) => n == null ? '—' : (Math.round(n * 100) / 100).toLocaleString('es-CL');
   const TABS = [['inicio', 'Inicio', '▦'], ['reg', 'Registrar', '＋'], ['conteo', 'Conteo', '✓'], ['tiempos', 'Tiempos', '◷'], ['etiquetas', 'Etiquetas', '▮▯'], ['datos', 'Datos', '⇄']];
-  const P = { eventos: [], dev: '', user: '', tab: 'inicio', msg: null, edit: null, anular: null, tipo: 'Salida', sel: { reg: '', conteo: '', tiempos: '' }, ultExport: 0, instalar: null, scanOk: false, ult: '' };
+  const P = { eventos: [], dev: '', user: '', tab: 'inicio', msg: null, edit: null, anular: null, tipo: 'Salida', sel: { reg: '', conteo: '', tiempos: '' }, ultExport: 0, instalar: null, scanOk: false, ult: '', envio: '', sync: { cfg: null, enviados: new Set(), desde: 0, estado: 'off', ult: 0, ocupado: false, error: '' } };
   let ST = null;
 
   const nuevoId = () => P.dev + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const recalcular = () => { ST = C.build(CAT, P.eventos); };
   async function registrar(e) {
     e.id = nuevoId(); e.ts = Date.now(); e.dev = P.dev; if (!e.fecha) e.fecha = C.hoyISO(); e.resp = e.resp || P.user;
-    await self.Store.agregar([e]); P.eventos.push(e); recalcular(); return e;
+    await self.Store.agregar([e]); P.eventos.push(e); recalcular(); P.envio = '';
+    if (P.sync.cfg) { await Promise.race([sincronizar(), new Promise(r => setTimeout(r, 4000))]); P.envio = pendientes() === 0 && P.sync.estado === 'ok' ? 'Enviado a la planilla compartida.' : 'Quedó pendiente de enviar; se enviará cuando haya conexión.'; }
+    return e;
   }
-  const aviso = (t, k = 'ok') => { P.msg = { t, k }; };
+  /* ---------- planilla compartida ---------- */
+  const pendientes = () => P.eventos.filter(e => !P.sync.enviados.has(e.id)).length;
+  function pintarSync() {
+    const el = $('#syncst'); if (!el) return; const y = P.sync, hh = y.ult ? new Date(y.ult).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
+    let t, k;
+    if (!y.cfg) { t = 'Modo local: este celular no está conectado a la planilla compartida'; k = 'off'; }
+    else if (y.estado === 'clave') { t = 'No sincroniza: ' + y.error; k = 'bad'; }
+    else if (y.estado === 'ok' && !pendientes()) { t = 'Sincronizado a las ' + hh; k = 'ok'; }
+    else if (y.estado === 'sync') { t = 'Sincronizando…'; k = 'warn'; }
+    else { t = 'Sin conexión: ' + pendientes() + ' movimiento(s) pendiente(s) de enviar' + (hh ? ' · última vez ' + hh : ''); k = 'warn'; }
+    el.textContent = t; el.className = 'sy-' + k;
+  }
+  function refrescarSuave() {
+    const m = document.getElementById('main'); const guard = {};
+    m.querySelectorAll('input[id],select[id],textarea[id]').forEach(x => { guard[x.id] = x.type === 'checkbox' ? x.checked : x.value; });
+    const y = self.scrollY || 0; render();
+    m.querySelectorAll('input[id],select[id],textarea[id]').forEach(x => { if (x.id in guard && x.type !== 'file') { if (x.type === 'checkbox') x.checked = guard[x.id]; else if (x.tagName !== 'SELECT' || [...x.options].some(o => o.value === guard[x.id])) x.value = guard[x.id]; } });
+    scrollTo(0, y);
+  }
+  async function sincronizar() {
+    const y = P.sync; if (!y.cfg || y.ocupado) return; y.ocupado = true; y.estado = 'sync'; pintarSync(); let nuevos = 0;
+    try {
+      for (let i = 0; i < 20; i++) {
+        const r = await self.Sync.ronda({ eventos: P.eventos, enviados: y.enviados, desde: y.desde, cfg: y.cfg, red: self.Sync.redReal, fusionar: C.fusionar, cods: CAT.map(c => c.cod) });
+        if (!r.ok) { y.estado = r.tipo === 'clave' ? 'clave' : 'red'; y.error = r.error; break; }
+        if (r.nuevos.length) { await self.Store.agregar(r.nuevos); P.eventos.push(...r.nuevos); nuevos += r.nuevos.length; }
+        r.enviadosIds.forEach(id => y.enviados.add(id)); y.desde = r.seq; y.estado = 'ok'; y.ult = Date.now();
+        await self.Store.fijarMeta('sync_enviados', [...y.enviados]); await self.Store.fijarMeta('sync_desde', y.desde);
+        if (!r.masPorEnviar) break;
+      }
+    } catch (e) { y.estado = 'red'; }
+    y.ocupado = false; if (nuevos) { recalcular(); } pintarSync(); if (nuevos && !document.querySelector('#scan:not([hidden])')) refrescarSuave();
+  }
+  const frescar = () => P.sync.cfg ? Promise.race([sincronizar(), new Promise(r => setTimeout(r, 3000))]) : Promise.resolve();
+  const aviso = (t, k = 'ok') => { P.msg = { t: t + (k !== 'bad' && P.envio ? ' ' + P.envio : ''), k }; P.envio = ''; };
   const msgHtml = () => P.msg ? `<div class="msg ${P.msg.k}" role="${P.msg.k === 'bad' ? 'alert' : 'status'}">${esc(P.msg.t)}</div>` : '';
   const pill = (e) => ({ rep: '<span class="pill bad">Reponer</span>', max: '<span class="pill warn">Sobre máximo</span>', ok: '<span class="pill ok">En rango</span>', na: '<span class="pill na">Sin parámetros</span>' }[e]);
 
@@ -139,8 +175,16 @@
     <div class="card"><h2 style="margin-top:0">Cargar parámetros de los 20 insumos</h2><p class="muted">Descargue la plantilla, complétela en Excel (ubicación, saldo inicial, mínimo, máximo, consumo diario y plazo) y súbala aquí. Es más rápido que editar insumo por insumo. La plantilla trae una ubicación sugerida que debe validar la jefatura.</p>
     <div class="btns"><button class="btn sec" data-act="exp-par">Descargar plantilla (.csv)</button></div>
     <label for="p-f">Plantilla completada (.csv)</label><input type="file" id="p-f" accept=".csv,text/csv"><div class="btns"><button class="btn" data-act="imp-par">Cargar parámetros</button></div><div id="p-res"></div></div>
+    <div class="card"><h2 style="margin-top:0">Planilla compartida (tiempo casi real)</h2>
+    <p class="muted">Conecta este celular a la planilla de Google del equipo: lo que registre cualquiera aparece en los demás celulares en segundos y todos ven el mismo saldo. Sin internet sigue funcionando y envía después.</p>
+    <p><b>Estado:</b> ${!P.sync.cfg ? 'no conectado' : P.sync.estado === 'clave' ? 'clave incorrecta' : P.sync.estado === 'ok' ? 'conectado' + (pendientes() ? ', con ' + pendientes() + ' pendiente(s)' : '') : 'sin conexión, ' + pendientes() + ' pendiente(s)'}</p>
+    <label for="sy-u">Dirección de la planilla (la que termina en /exec)</label><input type="url" id="sy-u" value="${esc(P.sync.cfg ? P.sync.cfg.url : '')}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off">
+    <label for="sy-k">Clave del equipo</label><input type="password" id="sy-k" value="${esc(P.sync.cfg ? P.sync.cfg.clave : '')}" autocomplete="off">
+    ${!P.sync.cfg && P.eventos.length ? `<label><input type="checkbox" id="sy-ok" style="width:auto;margin-right:8px">Este celular tiene ${P.eventos.length} registros y se enviarán a la planilla. Marque solo si son reales (los de prueba bórrelos antes).</label>` : ''}
+    <div id="sy-res"></div>
+    <div class="btns"><button class="btn" data-act="sync-guardar">${P.sync.cfg ? 'Guardar y probar' : 'Conectar'}</button>${P.sync.cfg ? '<button class="btn sec" data-act="sync-ahora">Sincronizar ahora</button><button class="btn sec" data-act="sync-quitar">Desconectar</button>' : ''}</div></div>
     ${P.instalar ? `<div class="card"><h2 style="margin-top:0">Instalar en el celular</h2><div class="btns"><button class="btn" data-act="instalar">Instalar la app</button></div></div>` : ''}
-    <div class="card"><h2 style="margin-top:0">Dejar este celular en blanco</h2><p class="muted">Borra los registros y parámetros de este celular. Úselo solo para quitar datos de prueba o si ya exportó y entregó sus registros. Hoy hay <b>${ST.vivos.length}</b> movimientos${P.ultExport ? '' : ' y nunca se exportó'}.</p>
+    <div class="card"><h2 style="margin-top:0">Dejar este celular en blanco</h2><p class="muted">Borra los registros y parámetros de este celular. Úselo solo para quitar datos de prueba o si ya exportó y entregó sus registros. Hoy hay <b>${ST.vivos.length}</b> movimientos${P.ultExport ? '' : ' y nunca se exportó'}. Si este celular está conectado a la planilla compartida, los registros volverán a bajar en la próxima sincronización: para empezar de cero, desconéctelo antes y vacíe también la hoja Eventos.</p>
     <label for="z-t">Para confirmar, escriba BORRAR</label><input type="text" id="z-t" autocomplete="off" autocapitalize="characters"><div class="btns"><button class="btn bad" data-act="reiniciar">Borrar los datos de este celular</button></div><div id="z-res"></div></div>
     <div class="card"><h2 style="margin-top:0">Estado</h2><p class="muted">Almacenamiento: ${self.Store.modo() === 'idb' ? 'IndexedDB' : 'localStorage (respaldo)'} · Dispositivo: <span class="code">${esc(P.dev)}</span> · Cámara: ${P.scanOk ? 'disponible' : 'no disponible en este navegador (digite el código)'} · Registros: ${ST.evs.length}</p></div>`;
   }
@@ -200,6 +244,7 @@
       await registrar({ tipo: 'Anulación', ref: m.id, cod: m.cod, obs: mo }); P.anular = null; aviso('Movimiento anulado. Queda en el registro.'); render();
     },
     async 'guardar-mov'() {
+      await frescar();
       const t = P.tipo, cod = P.sel.reg, m = { tipo: t, cod, cant: C.num(val('f-cant')), fecha: val('f-fecha'), doc: val('f-doc'), resp: val('f-resp'), obs: val('f-obs') };
       if (t === 'Salida' || t === 'Ingreso' || t === 'Devolución') { m.lote = val('f-lote'); const v = $('#f-venc'); if (v) m.venc = v.value; }
       if (t === 'Devolución') { m.verificada = val('f-ver') === 'si'; m.aut = val('f-aut'); if (!val('f-ver')) return msgErr(['Indique si el jefe de bodega verificó la devolución.']); }
@@ -209,6 +254,7 @@
       await registrar(m); aviso(`Registrado. Saldo de ${cod}: ${fmt(C.saldo(ST, cod))} ${ST.cfg[cod].uni}.`); P.sel.reg = ''; render();
     },
     async 'guardar-conteo'() {
+      await frescar();
       const cod = P.sel.conteo, m = { tipo: 'Conteo', cod, cant: C.num(val('f-cant')), resp: val('f-resp'), obs: val('f-obs') };
       const err = C.validar(ST, m); if (err.length) return msgErr(err);
       P.user = m.resp; await self.Store.fijarMeta('user', P.user);
@@ -221,6 +267,18 @@
       P.user = m.resp; await self.Store.fijarMeta('user', P.user);
       await registrar(m); aviso(`Tiempo guardado: ${fmt(m.cant)} min para ${cod}.`); P.sel.tiempos = ''; render();
     },
+    async 'sync-guardar'() {
+      const box = $('#sy-res'), bad = (t) => { box.innerHTML = `<div class="msg bad" role="alert">${esc(t)}</div>`; };
+      const url = val('sy-u'), clave = val('sy-k'); if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(url)) return bad('La dirección debe empezar con https://script.google.com/ y terminar en /exec.');
+      if (!clave) return bad('Escriba la clave del equipo.'); if (!P.user) return bad('Primero escriba su nombre en Mis datos.');
+      const ok = $('#sy-ok'); if (ok && !ok.checked) return bad('Marque la casilla para confirmar que los registros de este celular se envían, o bórrelos antes.');
+      box.innerHTML = '<div class="msg warn">Probando la conexión…</div>';
+      const t = await self.Sync.probar({ url, clave }); if (!t.ok) return bad(t.error);
+      P.sync.cfg = { url, clave }; await self.Store.fijarMeta('sync_cfg', P.sync.cfg); P.sync.estado = 'red'; await sincronizar();
+      aviso(P.sync.estado === 'ok' ? 'Conectado a la planilla compartida.' : 'Conectado, pero no se pudo sincronizar todavía: ' + (P.sync.error || 'revise la conexión') + '.', P.sync.estado === 'ok' ? 'ok' : 'warn'); render();
+    },
+    async 'sync-ahora'() { await sincronizar(); aviso(P.sync.estado === 'ok' ? 'Sincronizado.' : 'No se pudo sincronizar: ' + (P.sync.error || 'sin conexión') + '.', P.sync.estado === 'ok' ? 'ok' : 'warn'); render(); },
+    async 'sync-quitar'() { P.sync.cfg = null; P.sync.estado = 'off'; await self.Store.fijarMeta('sync_cfg', null); aviso('Este celular quedó en modo local. Sus registros se conservan.', 'ok'); pintarSync(); render(); },
     'exp-par'() { exportar('plantilla_parametros_' + C.hoyISO() + '.csv', C.csvParametros(ST, true), 'text/csv'); },
     async 'imp-par'() {
       const box = $('#p-res'), f = $('#p-f').files[0], bad = (t) => { box.innerHTML = `<div class="msg bad" role="alert">${esc(t)}</div>`; };
@@ -233,7 +291,7 @@
     },
     async reiniciar() {
       if (val('z-t') !== 'BORRAR') { $('#z-res').innerHTML = '<div class="msg bad" role="alert">Escriba BORRAR para confirmar.</div>'; return; }
-      await self.Store.borrarTodo(); await self.Store.fijarMeta('ultExport', 0); P.eventos = []; P.ultExport = 0; recalcular(); aviso('Este celular quedó en blanco.', 'ok'); P.tab = 'inicio'; render();
+      await self.Store.borrarTodo(); await self.Store.fijarMeta('ultExport', 0); P.eventos = []; P.ultExport = 0; P.sync.enviados = new Set(); P.sync.desde = 0; await self.Store.fijarMeta('sync_enviados', []); await self.Store.fijarMeta('sync_desde', 0); recalcular(); aviso('Este celular quedó en blanco.', 'ok'); P.tab = 'inicio'; render();
     },
     imprimir() { self.print(); },
     'exp-json'() { exportar(`registros_${(P.user || P.dev).replace(/\W+/g, '_')}_${C.hoyISO()}.json`, C.paquete(P.eventos, P.dev, P.user), 'application/json'); },
@@ -270,9 +328,12 @@
     P.eventos = await self.Store.todos();
     P.dev = (await self.Store.meta('dev')) || ('d' + Math.random().toString(36).slice(2, 7)); await self.Store.fijarMeta('dev', P.dev);
     P.user = (await self.Store.meta('user')) || ''; P.ultExport = (await self.Store.meta('ultExport')) || 0;
+    P.sync.cfg = (await self.Store.meta('sync_cfg')) || null; P.sync.enviados = new Set((await self.Store.meta('sync_enviados')) || []); P.sync.desde = (await self.Store.meta('sync_desde')) || 0; if (P.sync.cfg) P.sync.estado = 'red';
     recalcular(); try { P.scanOk = await self.Scanner.disponible(); } catch (e) { }
     if (!P.user) P.tab = 'datos';
-    render();
+    render(); pintarSync(); sincronizar();
+    setInterval(() => { if (document.visibilityState === 'visible') sincronizar(); }, 15000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); }); addEventListener('online', sincronizar);
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => { });
   })();
 })();
